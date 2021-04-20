@@ -1,0 +1,46 @@
+---
+title: "data_cleaning"
+author: "Ethan"
+date: "4/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+```{r libraries_raw, message=FALSE, warning=FALSE}
+
+library(readxl)
+library(sf)
+library(janitor)
+
+df_raw <- read_excel("data/2021_01_06_Climate Vulnerability Composite Score_MASTER FILE.xlsx", 
+    sheet = "Composite (exp+vul) score", 
+    col_types = c("text", "numeric", "numeric", 
+        "numeric", "skip", "numeric", "numeric", 
+        "skip", "skip", "skip", "skip", "skip", 
+        "skip"))
+
+bg_raw <- st_read("data/shape_files/tl_2019_48_bg.shp", stringsAsFactors = FALSE)
+bg_raw <-st_transform(texas_bg_raw,"+proj=longlat +ellps=WGS84 +datum=WGS84")
+
+
+
+```
+
+
+```{r}
+
+df <- df_raw[1:640,]
+
+df <- df %>% left_join(bg_raw, by = c("GEOID_" = "GEOID")) %>% clean_names()
+
+saveRDS(df, "data/austin_composite.rds")
+
+```
