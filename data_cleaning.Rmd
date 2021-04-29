@@ -19,6 +19,7 @@ knitr::opts_chunk$set(
 library(readxl)
 library(sf)
 library(janitor)
+library(readr)
 
 df_raw <- read_excel("data/2021_01_06_Climate Vulnerability Composite Score_MASTER FILE.xlsx", 
     sheet = "Composite (exp+vul) score", 
@@ -28,18 +29,52 @@ df_raw <- read_excel("data/2021_01_06_Climate Vulnerability Composite Score_MAST
         "skip"))
 
 bg_raw <- st_read("data/shape_files/tl_2019_48_bg.shp", stringsAsFactors = FALSE)
-bg_raw <-st_transform(texas_bg_raw,"+proj=longlat +ellps=WGS84 +datum=WGS84")
+bg_raw <-st_transform(bg_raw,"+proj=longlat +ellps=WGS84 +datum=WGS84")
 
+ej_raw <- read_csv("data/EJSCREEN_2020_USPR.csv")
 
+ej_columns_raw <- read_excel("data/2020_EJSCREEEN_columns-explained.xlsx", 
+    col_types = c("skip", "text", "text"))
 
 ```
 
 
 ```{r}
 
-df <- df_raw[1:640,]
+df <- df_raw[1:640, ]
 
-df <- df %>% left_join(bg_raw, by = c("GEOID_" = "GEOID")) %>% clean_names()
+df$`SVI+Flood`[is.na(df$`SVI+Flood`)] <- 0
+
+ej_columns <- ej_columns_raw[-2, ]
+
+new_columns <- ej_columns$Description
+
+ej <- ej_raw
+
+colnames(ej) <- new_columns
+
+df <-
+    df %>% 
+    left_join(bg_raw, by = c("GEOID_" = "GEOID")) %>%
+    left_join(ej, by = c("GEOID_" = "Census FIPS code for block group")) 
+
+
+geometry <- select(df, GEOID_, geometry)
+df <-
+    df %>% 
+    relocate(geometry, .after = last_col()) %>%
+    mutate(across(everything(), as.character)) %>%
+    pivot_longer(cols = 2:93,
+                 names_to = "var",
+                 values_to = "value") %>%
+    select(GEOID_, var, value) %>% 
+    left_join(geometry)
+
+
+
+df$value <- as.numeric(df$value)
+
+df <- na.omit(df)
 
 saveRDS(df, "data/austin_composite.rds")
 
