@@ -126,6 +126,19 @@ server <- function(input, output, session) {
         austin_map %>% dplyr::filter(var == input$var)
     })
     
+   pal <- reactive({
+       
+       colorNumeric(
+           palette = "viridis", n = 10,
+           domain = variable()$value)
+       
+       
+   })
+       
+       
+   
+
+    
     observe({
         leafletProxy("bg", data = variable()) %>%
             clearShapes() %>%
@@ -136,14 +149,18 @@ server <- function(input, output, session) {
                 smoothFactor = 0.5,
                 opacity = 1.0,
                 fillOpacity = 0.5,
-                fillColor = ~ colorQuantile("YlOrRd", variable()$value)(variable()$value),
+                fillColor = ~ pal()(variable()$value),
                 highlightOptions = highlightOptions(
                     color = "white",
                     weight = 2,
                     bringToFront = TRUE
                 ),
                 label = ~ paste0(variable()$value)
-            )
+            ) %>% 
+            addLegend("bottomright",
+                      pal = pal(),
+                      values = ~variable()$value,
+                      title = input$var)
     })
     
 }
