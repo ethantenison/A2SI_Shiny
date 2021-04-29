@@ -22,6 +22,7 @@ library(htmltools)
 library(shinyWidgets)
 library(ggplot2)
 library(rsconnect)
+library(DT)
 
 # ------------------------------- #
 # ------------------------------- #
@@ -29,24 +30,13 @@ library(rsconnect)
 # ------- Reference Data -------- #
 # ------------------------------- #
 # ------------------------------- #
+options(scipen = 999)
 
 austin_map <- readRDS("./data/austin_composite.rds")
 austin_map <- as.data.frame(austin_map)
 austin_map <- st_as_sf(austin_map)
 austin_map <-
     st_transform(austin_map, "+proj=longlat +ellps=WGS84 +datum=WGS84")
-
-austin_map <-
-    austin_map %>% filter(
-        var == "COMPOSITE (v1)" |
-            var == "Air toxics cancer risk" |
-            var == "Air toxics respiratory hazard index" |
-            var == "Percentile for Diesel particulate matter level in air" |
-            var == "Percentile for Ozone level in air" |
-            var == "Percentile for PM2.5 level in air" |
-            var == "Percentile for % people of color" |
-            var == "Percentile for % low-income"
-    )
 
 
 var_choices <- unique(austin_map$var)
@@ -60,41 +50,67 @@ var_choices <- unique(austin_map$var)
 
 
 ui = dashboardPage(
-    header = dashboardHeader(title = "A2SI"),
-    sidebar = dashboardSidebar(useShinyjs(),
-                               sidebarMenu(
-                                   menuItem(
-                                       "A2SI Data",
-                                       tabName = "data",
-                                       icon = icon("project-diagram")
-                                   ),
-                                   conditionalPanel(
-                                       condition = "input.tabs == 'data'"
-                                   )
+    header = dashboardHeader(title = tagList(
+        span(class = "logo-lg", tags$img(src = 'images/logo_skinny.png', width =
+                                             '50%')),
+        img(src = "https://image.flaticon.com/icons/svg/204/204074.svg")
+    )),
+    sidebar = dashboardSidebar(
+        useShinyjs(),
+        sidebarMenu(
+            menuItem(
+                "A2SI Data",
+                tabName = "data",
+                icon = icon("project-diagram")
+            ),
+            conditionalPanel(condition = "input.tabs == 'data'"),
+            menuItem(
+                "About Research",
+                tabName = "about",
+                icon = icon("question")
+            ),
+            conditionalPanel(condition = "input.tabs == 'about'")
+            
+        )
+    ),
+    body = dashboardBody(tabItems(
+        tabItem(tabName = "data",
+                
+                fluidRow(
+                    column(width = 6,
+                           fluidRow(
+                               box(
+                                   title = "Austin Area Map",
+                                   width = 12,
+                                   status = "info",
+                                   solidHeader = TRUE,
+                                   leafletOutput("bg", height = 600),
+                                   selectInput("var", "Variable", choices = var_choices)
                                    
-                               )),
-    body = dashboardBody(tabItems(tabItem(
-        tabName = "data",
-        fluidRow(column(width = 6,
-                        box(title = "Austin Area Map",
-                            width = 12,
-                            status = "info",
-                            background = "olive",
-                            gradient = TRUE,
-                            leafletOutput("bg", height = 700),
-                            selectInput("var", "Variable", choices = var_choices)
-                            
-                        )),
-                 column(width = 6,
-                        box(title = "A2SI Indicators",
-                            width = 12,
-                            status = "danger",
-                            background = "black",
-                            gradient = TRUE,
-                            DT::dataTableOutput("table")
-                            
-                        )))
-    )))
+                               )
+                           )),
+                    column(width = 6,
+                           fluidRow(
+                               div(
+                                   id = "logo",
+                                   style = "padding-left: 20px !important;",
+                                   HTML('<center><img src="images/AASI_logo_v1b-01.png" width="400"></center>')
+                               )
+                           ),
+                           fluidRow(
+                               box(
+                                   title = "A2SI Indicators",
+                                   width = 12,
+                                   status = "info",
+                                   solidHeader = TRUE
+                                   # DT::dataTableOutput("table", width = "20%")
+                                   
+                               )
+                           ))
+                )),
+        tabItem(tabName = "about",
+                fluidRow())
+    ))
     
 )
 
@@ -126,18 +142,17 @@ server <- function(input, output, session) {
         austin_map %>% dplyr::filter(var == input$var)
     })
     
-   pal <- reactive({
-       
-       colorNumeric(
-           palette = "viridis", n = 10,
-           domain = variable()$value)
-       
-       
-   })
-       
-       
-   
-
+    pal <- reactive({
+        colorNumeric(palette = "viridis",
+                     n = 10,
+                     domain = variable()$value)
+        
+        
+    })
+    
+    
+    
+    
     
     observe({
         leafletProxy("bg", data = variable()) %>%
@@ -155,13 +170,40 @@ server <- function(input, output, session) {
                     weight = 2,
                     bringToFront = TRUE
                 ),
-                label = ~ paste0(variable()$value)
-            ) %>% 
-            addLegend("bottomright",
-                      pal = pal(),
-                      values = ~variable()$value,
-                      title = input$var)
+                label = ~ paste0(
+                    variable()$var,
+                    ": ",
+                    format(variable()$value, digits = 1)
+                ),
+                
+                popup =  ~ paste0(
+                    "<h5/><b>",
+                    variable()$var,
+                    ": ",
+                    format(variable()$value, digits = 1),
+                    "<h6/>",
+                    "Census Block Group: ",
+                    GEOID_,
+                    "<h6/>",
+                    "Total population: ",
+                    format(variable()$`Total population`, big.mark = ","),
+                    "<h6/>",
+                    "People of COlor (%): ",
+                    format(variable()$`% people of color`, digits = 1),
+                    "<h6/>",
+                    "Low Income (%): ",
+                    format(variable()$`% low-income`, digits = 1)
+                )
+            ) %>%
+            addLegend(
+                "bottomright",
+                pal = pal(),
+                values = ~ variable()$value,
+                title = input$var
+            )
     })
+    
+    
     
 }
 
