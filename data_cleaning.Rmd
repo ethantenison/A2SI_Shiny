@@ -20,12 +20,26 @@ library(readxl)
 library(sf)
 library(janitor)
 library(readr)
+library(tidyverse)
 
 df_raw <- read_excel("data/2021_01_06_Climate Vulnerability Composite Score_MASTER FILE.xlsx", 
     sheet = "Composite (exp+vul) score", 
     col_types = c("text", "numeric", "numeric", 
         "numeric", "skip", "numeric", "numeric", 
         "skip", "skip", "skip", "skip", "skip", 
+        "skip"))
+
+
+exposure_raw <- read_excel("data/2021_01_06_Climate Vulnerability Composite Score_MASTER FILE.xlsx", 
+    sheet = "Composite (exposure only)", 
+    col_types = c("text", "skip", "numeric", 
+        "numeric", "skip", "skip", "numeric", 
+        "skip", "skip", "numeric", "skip", 
+        "skip", "skip"))
+
+vul_raw <- read_excel("data/2021_01_06_Climate Vulnerability Composite Score_MASTER FILE.xlsx", 
+    sheet = "Social Vulnerability", col_types = c("text", 
+        "skip", "numeric", "skip", "skip", 
         "skip"))
 
 bg_raw <- st_read("data/shape_files/tl_2019_48_bg.shp", stringsAsFactors = FALSE)
@@ -41,6 +55,7 @@ ej_columns_raw <- read_excel("data/2020_EJSCREEEN_columns-explained.xlsx",
 
 ```{r}
 
+#Minor Cleaning
 df <- df_raw[1:640, ]
 
 df$`SVI+Flood`[is.na(df$`SVI+Flood`)] <- 0
@@ -53,18 +68,53 @@ ej <- ej_raw
 
 colnames(ej) <- new_columns
 
+flood <- flood_raw %>% select(GEOID_, `Weighted Flood Risk Score (Normalized)`)
+
+wildfire <- wildfire_raw %>% select(`ID_Blk_Grp...1`,`WildFire Risk (0-1)`) %>% rename("GEOID_" = `ID_Blk_Grp...1`)
+
+#merging 
 df <-
-    df %>% 
+    df %>%
     left_join(bg_raw, by = c("GEOID_" = "GEOID")) %>%
-    left_join(ej, by = c("GEOID_" = "Census FIPS code for block group")) 
+    left_join(ej, by = c("GEOID_" = "Census FIPS code for block group")) %>%
+    left_join(exposure_raw, by = "GEOID_") %>%
+    left_join(vul_raw, by = c("GEOID_" = "ID_Blk_Grp")) %>%
+    rename(
+        "Composite Climate Hazard Exposure" = "Norm_Composite (Norm)",
+        "Social Vulnerability Score" = "SVI Score (0-1)",
+        "Climate Exposure and Climate Vulnerability" = "Norm_COMPOSITE (v1)"
+    ) %>%
+    select(
+        GEOID_,
+        "Flood Exposure (norm)",
+        "Wildfire Exposure (Norm)",
+        "Heat Exposure (Norm",
+        "Composite Climate Hazard Exposure",
+        "Social Vulnerability Score",
+        "Climate Exposure and Climate Vulnerability",
+        "Percentile for Ozone level in air" ,
+        "Percentile for PM2.5 level in air",
+        "Total population",
+        "% people of color",
+        "% low-income",
+        geometry
+        
+    )
 
 
-geometry <- select(df, GEOID_, geometry)
+
+
+geometry <- select(df,
+                   GEOID_,
+                   geometry,
+                   "Total population",
+                   "% people of color",
+                   "% low-income",
+)
 df <-
     df %>% 
-    relocate(geometry, .after = last_col()) %>%
     mutate(across(everything(), as.character)) %>%
-    pivot_longer(cols = 2:93,
+    pivot_longer(cols = 2:9,
                  names_to = "var",
                  values_to = "value") %>%
     select(GEOID_, var, value) %>% 
@@ -74,7 +124,7 @@ df <-
 
 df$value <- as.numeric(df$value)
 
-df <- na.omit(df)
+df$value[is.na(df$value)] <- 0
 
 saveRDS(df, "data/austin_composite.rds")
 
