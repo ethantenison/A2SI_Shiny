@@ -23,6 +23,7 @@ library(shinyWidgets)
 library(ggplot2)
 library(rsconnect)
 library(DT)
+library(plotly)
 
 # ------------------------------- #
 # ------------------------------- #
@@ -39,6 +40,8 @@ austin_map <-
     st_transform(austin_map, "+proj=longlat +ellps=WGS84 +datum=WGS84")
 
 
+austin_map <- austin_map %>% filter(GEOID_ != 480559601011 & GEOID_ != 480559601012 & GEOID_ != 484910203012)
+
 var_choices <- unique(austin_map$var)
 
 # ------------------------------- #
@@ -50,13 +53,15 @@ var_choices <- unique(austin_map$var)
 
 
 ui = dashboardPage(
+    skin = "black-light",
     header = dashboardHeader(title = tagList(
         span(class = "logo-lg", tags$img(src = 'images/logo_skinny.png', width =
                                              '50%')),
-        img(src = "https://image.flaticon.com/icons/svg/204/204074.svg")
+        img(src = 'images/arrow.png', width = '150%')
     )),
     sidebar = dashboardSidebar(
         useShinyjs(),
+        collapsed = TRUE,
         sidebarMenu(
             menuItem(
                 "A2SI Data",
@@ -73,45 +78,70 @@ ui = dashboardPage(
             
         )
     ),
-    body = dashboardBody(tabItems(
-        tabItem(tabName = "data",
-                
-                fluidRow(
-                    column(width = 6,
-                           fluidRow(
-                               box(
-                                   title = "Austin Area Map",
-                                   width = 12,
-                                   status = "info",
-                                   solidHeader = TRUE,
-                                   leafletOutput("bg", height = 600),
-                                   selectInput("var", "Variable", choices = var_choices)
-                                   
+    body = dashboardBody(tags$head(tags$style(
+        HTML('
+.box {margin: 20px;}')
+    )),
+tabItems(
+    tabItem(tabName = "data",
+            
+            fluidRow(
+                column(width = 6,
+                       style='padding:20px;',
+                       offset = 0,
+                       fluidRow(
+                           box(
+                               title = "Austin Area Map",
+                               width = 12,
+                               solidHeader = TRUE,
+                               leafletOutput("bg", height = 600),
+                               selectInput("var", "Select a Variable", choices = var_choices, selected = "Composite Climate Hazard Exposure")
+                               
+                           )
+                       )),
+                column(width = 6,
+                       offset = 0,
+                       style='padding:20px;',
+                       fluidRow(
+                           div(
+                               id = "logo",
+                               style = "padding-left: 20px !important;",
+                               HTML(
+                                   '<center><img src="images/AASI_logo_v1b-01.png" width="300"></center>'
                                )
-                           )),
-                    column(width = 6,
-                           fluidRow(
-                               div(
-                                   id = "logo",
-                                   style = "padding-left: 20px !important;",
-                                   HTML('<center><img src="images/AASI_logo_v1b-01.png" width="400"></center>')
+                           )
+                       ),
+                       fluidRow(
+                           column(
+                               width = 6,
+                               offset = 0,
+                               style='padding:20px; padding-left: 0px;',
+                               box(
+                                   title = "Variable Distribution",
+                                   width = 12,
+                                   solidHeader = TRUE,
+                                   plotlyOutput("violin")
+                                   
                                )
                            ),
-                           fluidRow(
+                           column(
+                               width = 6,
+                               offset = 0,
+                               style='padding:20px;padding-left: 0px;',
                                box(
-                                   title = "A2SI Indicators",
+                                   title = "Variable breakdown by Demographic Indicators",
                                    width = 12,
-                                   status = "info",
-                                   solidHeader = TRUE
-                                   # DT::dataTableOutput("table", width = "20%")
+                                   solidHeader = TRUE,
+                                   plotlyOutput("barplot")
                                    
                                )
-                           ))
-                )),
-        tabItem(tabName = "about",
-                fluidRow())
-    ))
-    
+                           )
+                       ))
+            )),
+    tabItem(tabName = "about",
+            fluidRow())
+))
+
 )
 
 
@@ -142,18 +172,15 @@ server <- function(input, output, session) {
         austin_map %>% dplyr::filter(var == input$var)
     })
     
+    
+    #Color Palette for Map
     pal <- reactive({
         colorNumeric(palette = "viridis",
                      n = 10,
                      domain = variable()$value)
-        
-        
     })
     
-    
-    
-    
-    
+    #Map attributes to display
     observe({
         leafletProxy("bg", data = variable()) %>%
             clearShapes() %>%
@@ -188,7 +215,7 @@ server <- function(input, output, session) {
                     "Total population: ",
                     format(variable()$`Total population`, big.mark = ","),
                     "<h6/>",
-                    "People of COlor (%): ",
+                    "People of Color (%): ",
                     format(variable()$`% people of color`, digits = 1),
                     "<h6/>",
                     "Low Income (%): ",
@@ -202,6 +229,74 @@ server <- function(input, output, session) {
                 title = input$var
             )
     })
+    
+    #Violin Plot of Variable Selected
+    output$violin <- renderPlotly({
+        plot_ly(
+            y = ~ variable()$value,
+            type = 'violin',
+            box = list(visible = T),
+            color = I("#29AF7F"),
+            meanline = list(visible = T),
+            x0 = input$var,
+            hoverinfo = "none"
+        )  %>%
+            layout(yaxis = list(title = "",
+                                zeroline = F))
+        
+        
+        
+    })
+    
+    #Data for barplot
+    bar <- reactive({
+        bar <-
+            austin_map %>%
+            dplyr::filter(var == input$var) %>%
+            mutate(
+                `> 50% People of Color` = if_else(`% people of color` >= 0.5, 1, 0),
+                `> 50% Low Income` = if_else(`% low-income` >= 0.5, 1, 0)
+            )
+        
+        total_av <- mean(bar$value)
+        
+        poc <- bar %>% filter(`> 50% People of Color` == 1)
+        poc_av <- mean(poc$value)
+        
+        lowincome <- bar %>% filter(`> 50% Low Income` == 1)
+        lowincome_av <- mean(lowincome$value)
+        
+        
+        bar_to_plotly <-
+            data.frame(
+                y = c(total_av, poc_av, lowincome_av),
+                x = c(
+                    "Austin Average",
+                    "> 50% People of Color",
+                    "> 50% Low Income"
+                )
+            )
+        
+        bar_to_plotly
+    })
+    
+    
+    #Plotly Barplot
+    output$barplot <- renderPlotly({
+        plot_ly(
+            x = bar()$x,
+            y = bar()$y,
+            color = I("#29AF7F"),
+            type = 'bar',
+            box = list(visible = T),
+            meanline = list(visible = T)
+            
+        )
+        
+    })
+    
+    
+    
     
     
     
