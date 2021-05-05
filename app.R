@@ -40,7 +40,10 @@ austin_map <-
     st_transform(austin_map, "+proj=longlat +ellps=WGS84 +datum=WGS84")
 
 
-austin_map <- austin_map %>% filter(GEOID_ != 480559601011 & GEOID_ != 480559601012 & GEOID_ != 484910203012)
+austin_map <-
+    austin_map %>% filter(GEOID_ != 480559601011 &
+                              GEOID_ != 480559601012 &
+                              GEOID_ != 484910203012)
 
 var_choices <- unique(austin_map$var)
 
@@ -51,9 +54,21 @@ var_choices <- unique(austin_map$var)
 # ------------------------------- #
 # ------------------------------- #
 
+jsToggleFS <- 'shinyjs.toggleFullScreen = function() {
+     var element = document.documentElement,
+ enterFS = element.requestFullscreen || element.msRequestFullscreen || element.mozRequestFullScreen || element.webkitRequestFullscreen,
+ exitFS = document.exitFullscreen || document.msExitFullscreen || document.mozCancelFullScreen || document.webkitExitFullscreen;
+ if (!document.fullscreenElement && !document.msFullscreenElement && !document.mozFullScreenElement && !document.webkitFullscreenElement) {
+ enterFS.call(element);
+ } else {
+ exitFS.call(document);
+ }
+ }'
+
+
 
 ui = dashboardPage(
-    skin = "black-light",
+    skin = "black",
     header = dashboardHeader(title = tagList(
         span(class = "logo-lg", tags$img(src = 'images/logo_skinny.png', width =
                                              '50%')),
@@ -61,88 +76,112 @@ ui = dashboardPage(
     )),
     sidebar = dashboardSidebar(
         useShinyjs(),
-        collapsed = TRUE,
+        shinyjs::extendShinyjs(text = jsToggleFS, functions = "toggleFullScreen"),
+        collapsed = FALSE,
         sidebarMenu(
+            id = "tabs",
             menuItem(
                 "A2SI Data",
                 tabName = "data",
                 icon = icon("project-diagram")
             ),
-            conditionalPanel(condition = "input.tabs == 'data'"),
+            conditionalPanel(
+                condition = "input.tabs == 'data'",
+                
+                selectInput(
+                    "var",
+                    "Select a Variable",
+                    choices = var_choices,
+                    selected = "Composite Climate Hazard Exposure"
+                )
+            ),
             menuItem(
                 "About Research",
                 tabName = "about",
                 icon = icon("question")
             ),
-            conditionalPanel(condition = "input.tabs == 'about'")
+            conditionalPanel(condition = "input.tabs == 'about'"),
+            hr(style = "margin-top: 5px; margin-bottom: 5px; width:90%"),
+            HTML(
+                "<button type='button' class='btn btn-default action-button shiny-bound-input' style='display: block; margin: 6px 5px 6px 15px; width: 200px;color: #152934;' onclick = 'shinyjs.toggleFullScreen();'><i class='fa fa-expand fa-pull-left'></i> Fullscreen</button>"
+            )
             
         )
+        
     ),
-    body = dashboardBody(tags$head(tags$style(
-        HTML('
-.box {margin: 20px;}')
-    )),
-tabItems(
-    tabItem(tabName = "data",
-            
-            fluidRow(
-                column(width = 6,
-                       style='padding:20px;',
-                       offset = 0,
-                       fluidRow(
-                           box(
-                               title = "Austin Area Map",
-                               width = 12,
-                               solidHeader = TRUE,
-                               leafletOutput("bg", height = 600),
-                               selectInput("var", "Select a Variable", choices = var_choices, selected = "Composite Climate Hazard Exposure")
-                               
-                           )
-                       )),
-                column(width = 6,
-                       offset = 0,
-                       style='padding:20px;',
-                       fluidRow(
-                           div(
-                               id = "logo",
-                               style = "padding-left: 20px !important;",
-                               HTML(
-                                   '<center><img src="images/AASI_logo_v1b-01.png" width="300"></center>'
-                               )
-                           )
-                       ),
-                       fluidRow(
-                           column(
-                               width = 6,
-                               offset = 0,
-                               style='padding:20px; padding-left: 0px;',
-                               box(
-                                   title = "Variable Distribution",
-                                   width = 12,
-                                   solidHeader = TRUE,
-                                   plotlyOutput("violin")
-                                   
-                               )
-                           ),
-                           column(
-                               width = 6,
-                               offset = 0,
-                               style='padding:20px;padding-left: 0px;',
-                               box(
-                                   title = "Variable breakdown by Demographic Indicators",
-                                   width = 12,
-                                   solidHeader = TRUE,
-                                   plotlyOutput("barplot")
-                                   
-                               )
-                           )
-                       ))
-            )),
-    tabItem(tabName = "about",
-            fluidRow())
-))
-
+    body = dashboardBody(
+        tags$head(tags$style(
+            HTML(
+                '
+.box {margin: 20px;}
+.myClass {
+        font-size: 20px;
+        line-height: 50px;
+        text-align: left;
+        font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+        padding: 0 15px;
+        overflow: hidden;
+        color: black;
+      }
+'
+            )
+        )),
+tags$script(
+    HTML(
+        '
+      $(document).ready(function() {
+        $("header").find("nav").append(\'<span class="myClass"> Austin Area Sustainability Indicators </span>\');
+      })
+     '
+    )
+),
+tabItems(tabItem(tabName = "data",
+                 
+                 fluidRow(
+                     column(
+                         width = 8,
+                         style = 'padding:20px;',
+                         offset = 0,
+                         fluidRow(
+                             box(
+                                 title = "Austin Area Map",
+                                 width = 12,
+                                 solidHeader = TRUE,
+                                 leafletOutput("bg", height = 800)
+                                 
+                             )
+                         )
+                     ),
+                     column(
+                         width = 4,
+                         style = 'padding:20px;',
+                         offset = 0,
+                         fluidRow(
+                             box(
+                                 title = "Variable Distribution",
+                                 width = 11,
+                                 solidHeader = TRUE,
+                                 plotlyOutput("violin", height = "350px")
+                                 
+                             )
+                         ),
+                         fluidRow(
+                             box(
+                                 title = "Variable breakdown by Demographic Indicators",
+                                 width = 11,
+                                 solidHeader = TRUE,
+                                 plotlyOutput("barplot", height = "350px")
+                                 
+                             )
+                         )
+                     )
+                 ))),
+tabItem(tabName = "about",
+        fluidRow())
+    )
 )
+
+
 
 
 
@@ -235,9 +274,7 @@ server <- function(input, output, session) {
         plot_ly(
             y = ~ variable()$value,
             type = 'violin',
-            box = list(visible = T),
             color = I("#29AF7F"),
-            meanline = list(visible = T),
             x0 = input$var,
             hoverinfo = "none"
         )  %>%
@@ -287,9 +324,7 @@ server <- function(input, output, session) {
             x = bar()$x,
             y = bar()$y,
             color = I("#29AF7F"),
-            type = 'bar',
-            box = list(visible = T),
-            meanline = list(visible = T)
+            type = 'bar'
             
         )
         
